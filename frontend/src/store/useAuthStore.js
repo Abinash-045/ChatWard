@@ -17,7 +17,6 @@ export const useAuthStore = create((set, get) => ({
   checkAuth: async () => {
     try {
       const res = await axiosInstance.get("/auth/check");
-
       set({ authUser: res.data });
       get().connectSocket();
     } catch (error) {
@@ -48,12 +47,39 @@ export const useAuthStore = create((set, get) => ({
       const res = await axiosInstance.post("/auth/login", data);
       set({ authUser: res.data });
       toast.success("Logged in successfully");
-
       get().connectSocket();
     } catch (error) {
       toast.error(error.response.data.message);
     } finally {
       set({ isLoggingIn: false });
+    }
+  },
+
+  // 👇 NEW: Face Login
+  faceLogin: async (imageBase64) => {
+    set({ isLoggingIn: true });
+    try {
+      const res = await axiosInstance.post("/auth/face-login", { imageBase64 });
+      set({ authUser: res.data });
+      toast.success("Face recognized! Welcome back 👤");
+      get().connectSocket();
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Face login failed");
+    } finally {
+      set({ isLoggingIn: false });
+    }
+  },
+
+  // 👇 NEW: Face Register
+  faceRegister: async (imageBase64) => {
+    set({ isUpdatingProfile: true });
+    try {
+      await axiosInstance.post("/auth/face-register", { imageBase64 });
+      toast.success("Face registered successfully! You can now login with your face 👤");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Face registration failed");
+    } finally {
+      set({ isUpdatingProfile: false });
     }
   },
 
@@ -87,18 +113,16 @@ export const useAuthStore = create((set, get) => ({
     if (!authUser || get().socket?.connected) return;
 
     const socket = io(BASE_URL, {
-      query: {
-        userId: authUser._id,
-      },
+      query: { userId: authUser._id },
     });
     socket.connect();
-
     set({ socket: socket });
 
     socket.on("getOnlineUsers", (userIds) => {
       set({ onlineUsers: userIds });
     });
   },
+
   disconnectSocket: () => {
     if (get().socket?.connected) get().socket.disconnect();
   },

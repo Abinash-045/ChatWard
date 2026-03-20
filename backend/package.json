@@ -12,6 +12,8 @@
   "type": "module",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-rekognition": "^3.1013.0",
+    "@aws-sdk/client-s3": "^3.1013.0",
     "bcryptjs": "^2.4.3",
     "chat-app": "file:..",
     "cloudinary": "^2.5.1",
@@ -21,7 +23,8 @@
     "express": "^4.21.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.8.1",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.7"

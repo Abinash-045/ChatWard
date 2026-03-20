@@ -20,6 +20,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
+    rekognitionId: { 
+       type: String,
+       default: null 
+    },
   },
   { timestamps: true }
 );

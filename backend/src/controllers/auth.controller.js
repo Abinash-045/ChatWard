@@ -2,6 +2,14 @@ import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import cloudinary from "../lib/cloudinary.js";
+import { RekognitionClient, SearchFacesByImageCommand, IndexFacesCommand } from "@aws-sdk/client-rekognition";
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
+import { v4 as uuidv4 } from "uuid";
+
+const rekognition = new RekognitionClient({ region: "ap-south-1" });
+const s3 = new S3Client({ region: "ap-south-1" });
+const BUCKET = "face-recognition-chatward";
+const COLLECTION_ID = "chatward-collection";
 
 export const signup = async (req, res) => {
   const { fullName, email, password } = req.body;
@@ -15,7 +23,6 @@ export const signup = async (req, res) => {
     }
 
     const user = await User.findOne({ email });
-
     if (user) return res.status(400).json({ message: "Email already exists" });
 
     const salt = await bcrypt.genSalt(10);
@@ -28,7 +35,6 @@ export const signup = async (req, res) => {
     });
 
     if (newUser) {
-      // generate jwt token here
       generateToken(newUser._id, res);
       await newUser.save();
 
@@ -113,6 +119,97 @@ export const checkAuth = (req, res) => {
     res.status(200).json(req.user);
   } catch (error) {
     console.log("Error in checkAuth controller", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const faceLogin = async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    if (!imageBase64) return res.status(400).json({ message: "Image is required" });
+
+    const imageBuffer = Buffer.from(
+      imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+      "base64"
+    );
+
+    const command = new SearchFacesByImageCommand({
+      CollectionId: COLLECTION_ID,
+      Image: { Bytes: imageBuffer },
+      MaxFaces: 1,
+      FaceMatchThreshold: 90,
+    });
+
+    const response = await rekognition.send(command);
+
+    if (!response.FaceMatches || response.FaceMatches.length === 0) {
+      return res.status(401).json({ message: "Face not recognized" });
+    }
+
+    const faceId = response.FaceMatches[0].Face.FaceId;
+    const user = await User.findOne({ rekognitionId: faceId });
+
+    if (!user) {
+      return res.status(401).json({ message: "No account linked to this face" });
+    }
+
+    generateToken(user._id, res);
+
+    res.status(200).json({
+      _id: user._id,
+      fullName: user.fullName,
+      email: user.email,
+      profilePic: user.profilePic,
+    });
+  } catch (error) {
+    console.log("Error in faceLogin:", error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+export const faceRegister = async (req, res) => {
+  try {
+    const { imageBase64 } = req.body;
+    const userId = req.user._id;
+
+    if (!imageBase64) return res.status(400).json({ message: "Image is required" });
+
+    const imageBuffer = Buffer.from(
+      imageBase64.replace(/^data:image\/\w+;base64,/, ""),
+      "base64"
+    );
+
+    const key = `${uuidv4()}.jpg`;
+
+    await s3.send(new PutObjectCommand({
+      Bucket: BUCKET,
+      Key: key,
+      Body: imageBuffer,
+      ContentType: "image/jpeg",
+    }));
+
+    const indexCommand = new IndexFacesCommand({
+      CollectionId: COLLECTION_ID,
+      Image: { S3Object: { Bucket: BUCKET, Name: key } },
+      MaxFaces: 1,
+      DetectionAttributes: [],
+    });
+
+    const indexResponse = await rekognition.send(indexCommand);
+
+    if (!indexResponse.FaceRecords || indexResponse.FaceRecords.length === 0) {
+      return res.status(400).json({ message: "No face detected in image" });
+    }
+
+    const faceId = indexResponse.FaceRecords[0].Face.FaceId;
+
+    await User.findByIdAndUpdate(userId, { rekognitionId: faceId });
+
+    await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+
+    res.status(200).json({ message: "Face registered successfully" });
+  } catch (error) {
+    console.log("Error in faceRegister:", error.message);
     res.status(500).json({ message: "Internal Server Error" });
   }
 };
