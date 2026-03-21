@@ -6,10 +6,10 @@ import { Eye, EyeOff, Loader2, Lock, Mail, MessageCircle, ScanFace } from "lucid
 
 const LoginPage = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [formData, setFormData] = useState({
-    email: "",
-    password: "",
-  });
+  const [formData, setFormData] = useState({ email: "", password: "" });
+  const [facePin, setFacePin] = useState("");
+  const [showPinInput, setShowPinInput] = useState(false);
+  const [pendingFaceImage, setPendingFaceImage] = useState(null);
   const faceInputRef = useRef(null);
   const { login, faceLogin, isLoggingIn } = useAuthStore();
 
@@ -18,12 +18,29 @@ const LoginPage = () => {
     login(formData);
   };
 
-  const handleFaceLogin = (e) => {
+  const handleFaceSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onloadend = () => faceLogin(reader.result);
+    reader.onloadend = () => {
+      setPendingFaceImage(reader.result);
+      setShowPinInput(true);
+    };
     reader.readAsDataURL(file);
+  };
+
+  const handleFaceLogin = async () => {
+    if (!pendingFaceImage || facePin.length !== 4) return;
+    await faceLogin(pendingFaceImage, facePin);
+    setShowPinInput(false);
+    setFacePin("");
+    setPendingFaceImage(null);
+  };
+
+  const handleCancel = () => {
+    setShowPinInput(false);
+    setFacePin("");
+    setPendingFaceImage(null);
   };
 
   return (
@@ -43,7 +60,7 @@ const LoginPage = () => {
             </div>
           </div>
 
-          {/* Form */}
+          {/* Email/Password Form */}
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="form-control">
               <label className="label">
@@ -98,38 +115,87 @@ const LoginPage = () => {
               disabled={isLoggingIn}
             >
               {isLoggingIn ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Loading...
-                </>
-              ) : (
-                "Sign in"
-              )}
+                <><Loader2 className="h-5 w-5 animate-spin" />Loading...</>
+              ) : "Sign in"}
             </button>
           </form>
 
-          {/* Divider */}
           <div className="divider text-xs text-base-content/40">OR</div>
 
-          {/* Face Login Button */}
-          <button
-            type="button"
-            className="btn btn-outline w-full gap-2"
-            onClick={() => faceInputRef.current.click()}
-            disabled={isLoggingIn}
-          >
-            {isLoggingIn ? (
-              <>
-                <Loader2 className="h-5 w-5 animate-spin" />
-                Scanning face...
-              </>
-            ) : (
-              <>
-                <ScanFace className="h-5 w-5" />
-                Login with Face
-              </>
-            )}
-          </button>
+          {/* Face Login Section */}
+          {!showPinInput ? (
+            <button
+              type="button"
+              className="btn btn-outline w-full gap-2"
+              onClick={() => faceInputRef.current.click()}
+              disabled={isLoggingIn}
+            >
+              {isLoggingIn ? (
+                <><Loader2 className="h-5 w-5 animate-spin" />Scanning face...</>
+              ) : (
+                <><ScanFace className="h-5 w-5" />Login with Face + PIN</>
+              )}
+            </button>
+          ) : (
+            /* PIN Input - shows after photo selected */
+            <div className="space-y-4 p-4 bg-base-200 rounded-xl border border-base-300">
+              {/* Face preview + status */}
+              <div className="flex items-center gap-3">
+                <img
+                  src={pendingFaceImage}
+                  className="w-12 h-12 rounded-full object-cover border-2 border-primary"
+                  alt="Face preview"
+                />
+                <div>
+                  <p className="text-sm font-medium">Face captured ✓</p>
+                  <p className="text-xs text-base-content/60">Now enter your 4-digit PIN</p>
+                </div>
+              </div>
+
+              {/* PIN Input */}
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text font-medium">4-digit PIN</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="h-5 w-5 text-base-content/40" />
+                  </div>
+                  <input
+                    type="password"
+                    className="input input-bordered w-full pl-10 tracking-widest text-center text-lg"
+                    placeholder="• • • •"
+                    maxLength={4}
+                    value={facePin}
+                    onChange={(e) => setFacePin(e.target.value.replace(/\D/g, ""))}
+                    autoFocus
+                  />
+                </div>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2">
+                <button
+                  className="btn btn-primary flex-1 gap-2"
+                  onClick={handleFaceLogin}
+                  disabled={isLoggingIn || facePin.length !== 4}
+                >
+                  {isLoggingIn ? (
+                    <><Loader2 className="h-5 w-5 animate-spin" />Verifying...</>
+                  ) : (
+                    <><ScanFace className="h-5 w-5" />Verify & Login</>
+                  )}
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleCancel}
+                  disabled={isLoggingIn}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Hidden file input */}
           <input
@@ -137,7 +203,7 @@ const LoginPage = () => {
             type="file"
             accept="image/*"
             className="hidden"
-            onChange={handleFaceLogin}
+            onChange={handleFaceSelect}
           />
 
           {/* Sign up link */}
@@ -153,7 +219,7 @@ const LoginPage = () => {
         </div>
       </div>
 
-      {/* Right Side - Image/Pattern */}
+      {/* Right Side */}
       <AuthImagePattern
         title={"Welcome back!"}
         subtitle={"Sign in to continue your conversations and catch up with your messages."}

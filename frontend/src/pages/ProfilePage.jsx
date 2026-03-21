@@ -1,11 +1,13 @@
 import { useState, useRef } from "react";
 import { useAuthStore } from "../store/useAuthStore";
-import { Camera, Mail, User, ScanFace, Loader2, CheckCircle } from "lucide-react";
+import { Camera, Mail, User, ScanFace, Loader2, CheckCircle, Lock } from "lucide-react";
 
 const ProfilePage = () => {
   const { authUser, isUpdatingProfile, updateProfile, faceRegister } = useAuthStore();
   const [selectedImg, setSelectedImg] = useState(null);
   const [facePreview, setFacePreview] = useState(null);
+  const [facePin, setFacePin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const faceInputRef = useRef(null);
 
   const handleImageUpload = async (e) => {
@@ -20,6 +22,18 @@ const ProfilePage = () => {
     };
   };
 
+  const handleFaceButtonClick = () => {
+    if (facePin.length !== 4) {
+      alert("Please enter a 4-digit PIN first");
+      return;
+    }
+    if (facePin !== confirmPin) {
+      alert("PINs do not match");
+      return;
+    }
+    faceInputRef.current.click();
+  };
+
   const handleFaceRegister = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -28,7 +42,9 @@ const ProfilePage = () => {
     reader.onload = async () => {
       const base64Image = reader.result;
       setFacePreview(base64Image);
-      await faceRegister(base64Image);
+      await faceRegister(base64Image, facePin);
+      setFacePin("");
+      setConfirmPin("");
     };
   };
 
@@ -84,7 +100,6 @@ const ProfilePage = () => {
               </div>
               <p className="px-4 py-2.5 bg-base-200 rounded-lg border">{authUser?.fullName}</p>
             </div>
-
             <div className="space-y-1.5">
               <div className="text-sm text-zinc-400 flex items-center gap-2">
                 <Mail className="w-4 h-4" />
@@ -101,8 +116,7 @@ const ProfilePage = () => {
               <h2 className="text-lg font-medium">Face Recognition Login</h2>
             </div>
             <p className="text-sm text-zinc-400">
-              Register your face to enable quick biometric login. 
-              Make sure your face is clearly visible in the photo.
+              Register your face + a 4-digit PIN for secure biometric login.
             </p>
 
             {/* Face Status */}
@@ -129,21 +143,62 @@ const ProfilePage = () => {
               </div>
             )}
 
+            {/* PIN Inputs */}
+            <div className="space-y-3">
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text text-sm font-medium">Set 4-digit PIN</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="w-4 h-4 text-base-content/40" />
+                  </div>
+                  <input
+                    type="password"
+                    className="input input-bordered w-full pl-10 tracking-widest text-center text-lg"
+                    placeholder="• • • •"
+                    maxLength={4}
+                    value={facePin}
+                    onChange={(e) => setFacePin(e.target.value.replace(/\D/g, ""))}
+                  />
+                </div>
+              </div>
+
+              <div className="form-control">
+                <label className="label">
+                  <span className="label-text text-sm font-medium">Confirm PIN</span>
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <Lock className="w-4 h-4 text-base-content/40" />
+                  </div>
+                  <input
+                    type="password"
+                    className="input input-bordered w-full pl-10 tracking-widest text-center text-lg"
+                    placeholder="• • • •"
+                    maxLength={4}
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ""))}
+                  />
+                </div>
+              </div>
+            </div>
+
             {/* Register Face Button */}
             <button
-              onClick={() => faceInputRef.current.click()}
+              onClick={handleFaceButtonClick}
               disabled={isUpdatingProfile}
               className="btn btn-primary w-full gap-2"
             >
               {isUpdatingProfile ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Registering face...
+                  Registering...
                 </>
               ) : (
                 <>
                   <ScanFace className="w-5 h-5" />
-                  {authUser?.rekognitionId ? "Update Face" : "Register Face"}
+                  {authUser?.rekognitionId ? "Update Face + PIN" : "Register Face + PIN"}
                 </>
               )}
             </button>
@@ -158,7 +213,7 @@ const ProfilePage = () => {
             />
 
             <p className="text-xs text-zinc-500 text-center">
-              Your face data is securely stored using AWS Rekognition
+              Your face and PIN are securely stored using AWS Rekognition
             </p>
           </div>
           {/* ───── END FACE RECOGNITION SECTION ───── */}

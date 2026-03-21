@@ -123,15 +123,18 @@ export const checkAuth = (req, res) => {
   }
 };
 
+// ───── FACE LOGIN (with PIN) ─────
 export const faceLogin = async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
-    if (!imageBase64) return res.status(400).json({ message: "Image is required" });
+    const { imageBase64, pin } = req.body;
 
-    const imageBuffer = Buffer.from(
-      imageBase64.replace(/^data:image\/\w+;base64,/, ""),
-      "base64"
-    );
+    if (!imageBase64) return res.status(400).json({ message: "Image is required" });
+    if (!pin || pin.length !== 4) return res.status(400).json({ message: "PIN must be 4 digits" });
+
+    // ✅ Fixed image parsing
+    const matches = imageBase64.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) return res.status(400).json({ message: "Invalid image format" });
+    const imageBuffer = Buffer.from(matches[2], "base64");
 
     const command = new SearchFacesByImageCommand({
       CollectionId: COLLECTION_ID,
@@ -153,6 +156,15 @@ export const faceLogin = async (req, res) => {
       return res.status(401).json({ message: "No account linked to this face" });
     }
 
+    if (!user.facePin) {
+      return res.status(401).json({ message: "No PIN set. Please register face again" });
+    }
+
+    const isPinCorrect = await bcrypt.compare(pin, user.facePin);
+    if (!isPinCorrect) {
+      return res.status(401).json({ message: "Incorrect PIN" });
+    }
+
     generateToken(user._id, res);
 
     res.status(200).json({
@@ -167,17 +179,19 @@ export const faceLogin = async (req, res) => {
   }
 };
 
+// ───── FACE REGISTER (with PIN) ─────
 export const faceRegister = async (req, res) => {
   try {
-    const { imageBase64 } = req.body;
+    const { imageBase64, pin } = req.body;
     const userId = req.user._id;
 
     if (!imageBase64) return res.status(400).json({ message: "Image is required" });
+    if (!pin || pin.length !== 4) return res.status(400).json({ message: "PIN must be 4 digits" });
 
-    const imageBuffer = Buffer.from(
-      imageBase64.replace(/^data:image\/\w+;base64,/, ""),
-      "base64"
-    );
+    // ✅ Fixed image parsing
+    const matches = imageBase64.match(/^data:image\/(\w+);base64,(.+)$/);
+    if (!matches) return res.status(400).json({ message: "Invalid image format" });
+    const imageBuffer = Buffer.from(matches[2], "base64");
 
     const key = `${uuidv4()}.jpg`;
 
@@ -198,16 +212,24 @@ export const faceRegister = async (req, res) => {
     const indexResponse = await rekognition.send(indexCommand);
 
     if (!indexResponse.FaceRecords || indexResponse.FaceRecords.length === 0) {
-      return res.status(400).json({ message: "No face detected in image" });
+      // ✅ Clean up S3 if no face detected
+      await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
+      return res.status(400).json({ message: "No face detected. Please use a clear photo." });
     }
 
     const faceId = indexResponse.FaceRecords[0].Face.FaceId;
 
-    await User.findByIdAndUpdate(userId, { rekognitionId: faceId });
+    const salt = await bcrypt.genSalt(10);
+    const hashedPin = await bcrypt.hash(pin, salt);
+
+    await User.findByIdAndUpdate(userId, {
+      rekognitionId: faceId,
+      facePin: hashedPin,
+    });
 
     await s3.send(new DeleteObjectCommand({ Bucket: BUCKET, Key: key }));
 
-    res.status(200).json({ message: "Face registered successfully" });
+    res.status(200).json({ message: "Face and PIN registered successfully" });
   } catch (error) {
     console.log("Error in faceRegister:", error.message);
     res.status(500).json({ message: "Internal Server Error" });

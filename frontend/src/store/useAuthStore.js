@@ -55,11 +55,11 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // 👇 NEW: Face Login
-  faceLogin: async (imageBase64) => {
+  // ✅ Face Login with PIN
+  faceLogin: async (imageBase64, pin) => {
     set({ isLoggingIn: true });
     try {
-      const res = await axiosInstance.post("/auth/face-login", { imageBase64 });
+      const res = await axiosInstance.post("/auth/face-login", { imageBase64, pin });
       set({ authUser: res.data });
       toast.success("Face recognized! Welcome back 👤");
       get().connectSocket();
@@ -70,12 +70,12 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  // 👇 NEW: Face Register
-  faceRegister: async (imageBase64) => {
+  // ✅ Face Register with PIN
+  faceRegister: async (imageBase64, pin) => {
     set({ isUpdatingProfile: true });
     try {
-      await axiosInstance.post("/auth/face-register", { imageBase64 });
-      toast.success("Face registered successfully! You can now login with your face 👤");
+      await axiosInstance.post("/auth/face-register", { imageBase64, pin });
+      toast.success("Face and PIN registered successfully! 👤");
     } catch (error) {
       toast.error(error.response?.data?.message || "Face registration failed");
     } finally {
