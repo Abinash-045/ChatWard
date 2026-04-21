@@ -194,4 +194,4 @@ If you find this project helpful or interesting, please consider giving it a ⭐
 
 ---
 
-Made with ❤️ by Abinash Behera
+Made with ❤️ by Abinash Behera.
